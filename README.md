@@ -1,33 +1,43 @@
-# NOCTURNE — Dark Synth (starter VST3 + standalone)
+# NOCTURNE — Dark Synth (VST3 + standalone)
 
-An original dark-toned hybrid instrument project for JUCE. It includes a custom saw/sub/pulse oscillator voice, low-pass filter and saturation, a phaser, LFO rate/depth controls, envelope parameter controls in the UI, and a sample loader for WAV/AIFF/FLAC/OGG files.
+A dark-toned polyphonic synthesizer built with JUCE: two detuned band-limited oscillators (saw / square / triangle) plus a sub oscillator, an ADSR amp envelope, a resonant low-pass filter with saturation, and a phaser. It ships with three sound banks of five patches each.
 
-## Important
-This package contains **source code**, not a precompiled Windows `.exe` or `.vst3` binary. A Windows build requires Windows, Visual Studio 2022 C++ tools, CMake, and JUCE. JUCE is not bundled here.
+## Build
 
-## Build on Windows
-1. Install **Visual Studio 2022** with *Desktop development with C++* and **CMake**.
-2. Download JUCE from https://github.com/juce-framework/JUCE .
-3. Extract JUCE and note its directory.
-4. Open a Developer PowerShell in this folder and run:
+A GitHub Actions workflow (`.github/workflows/build-windows.yml`) builds the Windows Standalone `.exe` and the VST3 on every push to `main`. Download the `NocturneDarkSynth-Windows` artifact from the run's page.
 
-   ```powershell
-   cmake -S . -B build -DJUCE_DIR="C:/path/to/JUCE"
-   cmake --build build --config Release
-   ```
+To build locally on Windows: install Visual Studio 2022 (Desktop development with C++), CMake and JUCE, then
 
-5. Look under `build/NocturneDarkSynth_artefacts/Release/` for the Standalone app and VST3 bundle. The exact folder can vary by CMake/JUCE version.
-6. Copy the `.vst3` bundle into:
-   `%CommonProgramFiles%\VST3`
-   Then rescan plugins in your DAW.
+```powershell
+cmake -S . -B build -DJUCE_DIR="C:/path/to/JUCE"
+cmake --build build --config Release
+```
 
-## Sound design controls
+Output is under `build/NocturneDarkSynth_artefacts/Release/`. Copy the `.vst3` bundle to `%CommonProgramFiles%\VST3` and rescan plugins in your DAW.
+
+## Playing it
+
+- In the Standalone app, click the on-screen keyboard, or click it once to focus it and play with the computer keyboard (A W S E D F T G Y H U J K ...). Z / X shift the octave.
+- In a DAW, play it from any MIDI track. Pitch bend is ±2 semitones.
+
+## Sound banks
+
+Pick a bank and patch with the selectors at the top right, or step through with `<` and `>`. Choosing a patch sets every sound control. All 15 patches are also exposed to the host as programs.
+
+| Bank | Patches |
+|------|---------|
+| NOCTURNE | Midnight Pad, Black Glass, Dusk Bass, Hollow Keys, Eclipse Lead |
+| ABYSS | Deep Drone, Sunken Choir, Pressure, Trench Pulse, Black Water |
+| STATIC | Neon Rust, Wire Saw, Cold Arp, Glitch Bell, Broken Radio |
+
+Edit `Source/Presets.h` to change the patches or add banks.
+
+## Controls
+
+- **Waveform / Detune / Sub:** oscillator shape, spread between the two oscillators (cents), and sub-oscillator level.
+- **Attack / Release:** amp envelope times.
 - **Cutoff / Resonance:** dark low-pass tone shaping.
 - **Drive:** soft saturation.
-- **Phaser:** modulation effect mix.
-- **LFO Rate / Mod Depth:** phaser modulation speed and intensity.
-- **Attack / Release:** exposed envelope controls (currently UI/parameter scaffold; see limitations).
-- **Sampler Mix:** exposed control scaffold; sample playback is loaded and triggered from MIDI.
+- **Phaser / LFO Rate / Mod Depth:** phaser mix, speed and intensity.
 
-## Current prototype limitations
-This is a starting point, not a production-ready commercial instrument. The attack/release and sampler-mix parameters are exposed but not yet wired into full envelope/mix behavior; sample loading is supported but sampler routing and host automation should be thoroughly tested before release. The sampler is triggered by MIDI notes, while the oscillator is the default sound source. Validate in your target DAW and test plugin state, MIDI, and sample-rate changes before distributing.
+Test in your target DAW before distributing, including plugin state, MIDI and sample-rate changes.

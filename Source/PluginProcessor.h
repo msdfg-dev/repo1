@@ -1,5 +1,8 @@
 #pragma once
 #include <JuceHeader.h>
+#include <atomic>
+#include "DarkVoice.h"
+#include "Presets.h"
 
 class NocturneDarkSynthAudioProcessor : public juce::AudioProcessor
 {
@@ -18,46 +21,41 @@ public:
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return 2.0; }
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram(int) override {}
-    const juce::String getProgramName(int) override { return "Nocturne"; }
+    double getTailLengthSeconds() const override { return 5.0; }
+
+    // Every factory patch is exposed to the host as a program.
+    int getNumPrograms() override { return Presets::totalPatches(); }
+    int getCurrentProgram() override { return currentProgram.load(); }
+    void setCurrentProgram(int index) override;
+    const juce::String getProgramName(int index) override;
     void changeProgramName(int, const juce::String&) override {}
+
     void getStateInformation(juce::MemoryBlock&) override;
     void setStateInformation(const void*, int) override;
 
+    // Load a factory patch (overwrites all sound parameters).
+    void applyPatch(int index);
+
     juce::AudioProcessorValueTreeState parameters;
-    bool loadSample(const juce::File& file);
-    juce::String getSampleName() const { return sampleName; }
+    juce::MidiKeyboardState keyboardState;   // on-screen / computer keyboard -> synth
 
 private:
-    struct DarkVoice : public juce::SynthesiserVoice
-    {
-        bool canPlaySound(juce::SynthesiserSound* sound) override;
-        void startNote(int midiNoteNumber, float velocity, juce::SynthesiserSound*, int) override;
-        void stopNote(float velocity, bool allowTailOff) override;
-        void pitchWheelMoved(int) override {}
-        void controllerMoved(int, int) override {}
-        void renderNextBlock(juce::AudioBuffer<float>&, int startSample, int numSamples) override;
-        void setRate(double rate) { sampleRate = rate; }
-        double sampleRate = 44100.0, phase = 0.0, phase2 = 0.0;
-        float level = 0.0f, noteHz = 440.0f, velocityLevel = 0.0f, release = 0.0f;
-        bool active = false, releasing = false;
-    };
-    struct DarkSound : public juce::SynthesiserSound
-    {
-        bool appliesToNote(int) override { return true; }
-        bool appliesToChannel(int) override { return true; }
-    };
+    juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+    void setParam(const char* id, float plainValue);
 
     juce::Synthesiser synth;
-    juce::AudioFormatManager formatManager;
-    juce::Synthesiser sampler;
-    juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     juce::dsp::Phaser<float> phaser;
-    juce::dsp::IIR::Filter<float> lowpassL, lowpassR;
-    juce::AudioBuffer<float> scratch;
-    juce::String sampleName = "No sample loaded";
+    juce::dsp::StateVariableTPTFilter<float> filter;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> cutoffSmooth;
+
+    std::atomic<float>* cutoffParam = nullptr;
+    std::atomic<float>* resonanceParam = nullptr;
+    std::atomic<float>* driveParam = nullptr;
+    std::atomic<float>* phaserParam = nullptr;
+    std::atomic<float>* rateParam = nullptr;
+    std::atomic<float>* depthParam = nullptr;
+
+    std::atomic<int> currentProgram { 0 };
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NocturneDarkSynthAudioProcessor)
 };
