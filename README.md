@@ -1,6 +1,6 @@
 # NOCTURNE — Dark Synth (VST3 + standalone)
 
-A dark-toned polyphonic synthesizer built with JUCE: two detuned band-limited oscillators (saw / square / triangle) plus a sub oscillator, an ADSR amp envelope, a resonant low-pass filter with saturation, and a phaser. It ships with three sound banks of five patches each.
+A dark-toned polyphonic synthesizer built with JUCE, in a classic hardware-synth layout: three oscillator windows (sine, triangle, saw) with live waveform displays, an ADSR amp envelope, a resonant low-pass filter with saturation, and a phaser. It ships with three sound banks of five patches each.
 
 ## Build
 
@@ -34,10 +34,19 @@ Edit `Source/Presets.h` to change the patches or add banks.
 
 ## Controls
 
-- **Waveform / Detune / Sub:** oscillator shape, spread between the two oscillators (cents), and sub-oscillator level.
-- **Attack / Release:** amp envelope times.
-- **Cutoff / Resonance:** dark low-pass tone shaping.
-- **Drive:** soft saturation.
-- **Phaser / LFO Rate / Mod Depth:** phaser mix, speed and intensity.
+Each oscillator window (OSC 1 sine, OSC 2 triangle, OSC 3 saw) has its own knobs, and all three play together:
+
+- **Level:** how loud that oscillator is in the mix (0 turns it off).
+- **Octave:** shift by -2 to +2 octaves.
+- **Fine:** detune by up to ±50 cents. Offset two oscillators slightly for a thicker sound.
+- **Shape:** changes the waveform, shown live in the window. Sine: **Fold** adds harmonics. Triangle: **Skew** leans it toward a ramp. Saw: **Square** blends it toward a square wave.
+
+Other sections:
+
+- **Filter:** cutoff, resonance, and drive (soft saturation).
+- **Amp envelope:** attack and release.
+- **Phaser:** mix, rate, and depth.
+
+Drag a knob to change it (a value pops up while you drag). Double-click to reset it.
 
 Test in your target DAW before distributing, including plugin state, MIDI and sample-rate changes.

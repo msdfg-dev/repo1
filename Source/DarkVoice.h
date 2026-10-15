@@ -2,6 +2,7 @@
 #include <JuceHeader.h>
 #include <atomic>
 #include <cmath>
+#include "Waveforms.h"
 
 // Sound object that accepts every note/channel; the oscillator voices play it.
 struct DarkSound : public juce::SynthesiserSound
@@ -10,18 +11,23 @@ struct DarkSound : public juce::SynthesiserSound
     bool appliesToChannel(int) override { return true; }
 };
 
-// Pointers to the plugin parameters a voice reads.
+// Parameters of one oscillator window.
+struct OscParams
+{
+    std::atomic<float>* level = nullptr;   // 0..1
+    std::atomic<float>* octave = nullptr;  // -2..+2
+    std::atomic<float>* fine = nullptr;    // cents
+    std::atomic<float>* shape = nullptr;   // 0..1, meaning depends on the oscillator
+};
+
 struct VoiceParams
 {
     std::atomic<float>* attack = nullptr;   // seconds
     std::atomic<float>* release = nullptr;  // seconds
-    std::atomic<float>* wave = nullptr;     // 0 saw, 1 square, 2 triangle
-    std::atomic<float>* detune = nullptr;   // cents
-    std::atomic<float>* sub = nullptr;      // 0..1
+    OscParams sine, tri, saw;
 };
 
-// Two detuned band-limited oscillators plus a sub sine one octave down,
-// shaped by an ADSR driven by the Attack/Release parameters.
+// Three oscillators (sine, triangle, saw) mixed together and shaped by an ADSR.
 class DarkVoice : public juce::SynthesiserVoice
 {
 public:
@@ -37,9 +43,9 @@ public:
         baseHz = juce::MidiMessage::getMidiNoteInHertz(midiNote);
         bendSemitones = (pitchWheel - 8192) / 8192.0 * 2.0;
         velGain = 0.25f + 0.75f * velocity;
-        phaseA = 0.0;
-        phaseB = 0.25;
-        phaseSub = 0.0;
+        phaseSine = 0.0;
+        phaseTri = 0.25;
+        phaseSaw = 0.5;
         updatePitch();
         adsr.setSampleRate(getSampleRate() > 0.0 ? getSampleRate() : 44100.0);
         updateEnvelope();
@@ -74,34 +80,34 @@ public:
         if (sr <= 0.0 || ! isVoiceActive())
             return;
 
-        const int wave = juce::jlimit(0, 2, (int) std::lround(load(params.wave, 0.0f)));
-        const double cents = load(params.detune, 6.0f);
-        const float subLevel = 0.5f * juce::jlimit(0.0f, 1.0f, load(params.sub, 0.6f));
-        const float waveGain = wave == 1 ? 0.75f : 1.0f;   // square is louder than saw
+        const float lvSine = level(params.sine), lvTri = level(params.tri), lvSaw = level(params.saw);
+        const float shSine = shape(params.sine), shTri = shape(params.tri), shSaw = shape(params.saw);
+        const double dtSine = increment(params.sine, sr);
+        const double dtTri = increment(params.tri, sr);
+        const double dtSaw = increment(params.saw, sr);
+
+        // Keep the combined level sensible however many oscillators are up.
+        const float total = lvSine + lvTri + lvSaw;
+        const float gain = 0.34f / juce::jmax(1.0f, total) * velGain;
 
         const int numChannels = out.getNumChannels();
-        const double dt = hz / sr;
-        const double dtA = dt * std::pow(2.0, cents / 1200.0);
-        const double dtB = dt * std::pow(2.0, -cents / 1200.0);
-        const double dtSub = dt * 0.5;
 
         for (int i = 0; i < numSamples; ++i)
         {
             const float env = adsr.getNextSample();
 
-            const float oscA = osc(wave, phaseA, dtA);
-            const float oscB = osc(wave, phaseB, dtB);
-            const float sub = (float) std::sin(juce::MathConstants<double>::twoPi * phaseSub);
-
-            const float s = (0.42f * waveGain * (oscA + oscB) + subLevel * sub)
-                            * env * velGain * voiceGain;
+            float s = 0.0f;
+            if (lvSine > 0.0005f) s += lvSine * Wave::sine(phaseSine, shSine);
+            if (lvTri > 0.0005f)  s += lvTri * Wave::triangle(phaseTri, shTri);
+            if (lvSaw > 0.0005f)  s += lvSaw * Wave::saw(phaseSaw, shSaw, dtSaw);
+            s *= env * gain;
 
             for (int ch = 0; ch < numChannels; ++ch)
                 out.addSample(ch, startSample + i, s);
 
-            phaseA += dtA;     if (phaseA >= 1.0) phaseA -= 1.0;
-            phaseB += dtB;     if (phaseB >= 1.0) phaseB -= 1.0;
-            phaseSub += dtSub; if (phaseSub >= 1.0) phaseSub -= 1.0;
+            phaseSine += dtSine; if (phaseSine >= 1.0) phaseSine -= 1.0;
+            phaseTri += dtTri;   if (phaseTri >= 1.0)  phaseTri -= 1.0;
+            phaseSaw += dtSaw;   if (phaseSaw >= 1.0)  phaseSaw -= 1.0;
 
             if (! adsr.isActive())
             {
@@ -117,37 +123,16 @@ private:
         return a != nullptr ? a->load() : fallback;
     }
 
-    static double polyBlep(double t, double dt)
-    {
-        if (t < dt)
-        {
-            t /= dt;
-            return t + t - t * t - 1.0;
-        }
-        if (t > 1.0 - dt)
-        {
-            t = (t - 1.0) / dt;
-            return t * t + t + t + 1.0;
-        }
-        return 0.0;
-    }
+    static float level(const OscParams& o) { return juce::jlimit(0.0f, 1.0f, load(o.level, 0.0f)); }
+    static float shape(const OscParams& o) { return juce::jlimit(0.0f, 1.0f, load(o.shape, 0.0f)); }
 
-    static float osc(int wave, double phase, double dt)
+    // Phase increment per sample for one oscillator (octave + fine tune applied).
+    double increment(const OscParams& o, double sr) const
     {
-        switch (wave)
-        {
-            case 1:   // square, band-limited
-            {
-                double v = phase < 0.5 ? 1.0 : -1.0;
-                v += polyBlep(phase, dt);
-                v -= polyBlep(std::fmod(phase + 0.5, 1.0), dt);
-                return (float) v;
-            }
-            case 2:   // triangle
-                return (float) (4.0 * std::abs(phase - 0.5) - 1.0);
-            default:  // saw, band-limited
-                return (float) (2.0 * phase - 1.0 - polyBlep(phase, dt));
-        }
+        const double oct = std::round((double) load(o.octave, 0.0f));
+        const double cents = (double) load(o.fine, 0.0f);
+        const double f = hz * std::pow(2.0, oct + cents / 1200.0);
+        return juce::jlimit(0.0, 0.45, f / sr);
     }
 
     void updatePitch() { hz = baseHz * std::pow(2.0, bendSemitones / 12.0); }
@@ -165,7 +150,6 @@ private:
     VoiceParams params;
     juce::ADSR adsr;
     double baseHz = 440.0, hz = 440.0, bendSemitones = 0.0;
-    double phaseA = 0.0, phaseB = 0.25, phaseSub = 0.0;
+    double phaseSine = 0.0, phaseTri = 0.25, phaseSaw = 0.5;
     float velGain = 1.0f;
-    static constexpr float voiceGain = 0.26f;
 };

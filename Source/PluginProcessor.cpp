@@ -15,9 +15,15 @@ NocturneDarkSynthAudioProcessor::NocturneDarkSynthAudioProcessor()
     VoiceParams vp;
     vp.attack  = parameters.getRawParameterValue("attack");
     vp.release = parameters.getRawParameterValue("release");
-    vp.wave    = parameters.getRawParameterValue("wave");
-    vp.detune  = parameters.getRawParameterValue("detune");
-    vp.sub     = parameters.getRawParameterValue("sub");
+    auto wire = [this](OscParams& o, const juce::String& prefix) {
+        o.level  = parameters.getRawParameterValue(prefix + "_level");
+        o.octave = parameters.getRawParameterValue(prefix + "_oct");
+        o.fine   = parameters.getRawParameterValue(prefix + "_fine");
+        o.shape  = parameters.getRawParameterValue(prefix + "_shape");
+    };
+    wire(vp.sine, "sine");
+    wire(vp.tri, "tri");
+    wire(vp.saw, "saw");
 
     synth.addSound(new DarkSound());
     for (int i = 0; i < 8; ++i)
@@ -38,10 +44,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout NocturneDarkSynthAudioProces
     p.push_back(std::make_unique<APF>("depth", "Mod Depth", 0.f, 1.f, 0.55f));
     p.push_back(std::make_unique<APF>("attack", "Attack", 0.001f, 2.f, 0.04f));
     p.push_back(std::make_unique<APF>("release", "Release", 0.02f, 5.f, 0.8f));
-    p.push_back(std::make_unique<APF>("detune", "Detune", 0.f, 50.f, 6.f));
-    p.push_back(std::make_unique<APF>("sub", "Sub Level", 0.f, 1.f, 0.6f));
-    p.push_back(std::make_unique<juce::AudioParameterChoice>("wave", "Waveform",
-                    juce::StringArray { "Saw", "Square", "Triangle" }, 0));
+    auto addOsc = [&p](const juce::String& prefix, const juce::String& name, float defLevel) {
+        p.push_back(std::make_unique<APF>(prefix + "_level", name + " Level", 0.f, 1.f, defLevel));
+        p.push_back(std::make_unique<APF>(prefix + "_oct", name + " Octave", juce::NormalisableRange<float>(-2.f, 2.f, 1.f), 0.f));
+        p.push_back(std::make_unique<APF>(prefix + "_fine", name + " Fine", juce::NormalisableRange<float>(-50.f, 50.f, 0.1f), 0.f));
+        p.push_back(std::make_unique<APF>(prefix + "_shape", name + " Shape", 0.f, 1.f, 0.f));
+    };
+    addOsc("sine", "Sine", 0.5f);
+    addOsc("tri", "Triangle", 0.4f);
+    addOsc("saw", "Saw", 0.6f);
     return { p.begin(), p.end() };
 }
 
@@ -64,9 +75,15 @@ void NocturneDarkSynthAudioProcessor::applyPatch(int index)
     setParam("depth", patch.depth);
     setParam("attack", patch.attack);
     setParam("release", patch.release);
-    setParam("wave", (float) patch.wave);
-    setParam("detune", patch.detune);
-    setParam("sub", patch.sub);
+    auto setOsc = [this](const juce::String& prefix, const Presets::OscPatch& o) {
+        setParam((prefix + "_level").toRawUTF8(), o.level);
+        setParam((prefix + "_oct").toRawUTF8(), (float) o.octave);
+        setParam((prefix + "_fine").toRawUTF8(), o.fine);
+        setParam((prefix + "_shape").toRawUTF8(), o.shape);
+    };
+    setOsc("sine", patch.sine);
+    setOsc("tri", patch.tri);
+    setOsc("saw", patch.saw);
 
     currentProgram = index;
     updateHostDisplay();
