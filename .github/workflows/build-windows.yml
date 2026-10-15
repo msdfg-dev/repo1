@@ -1,0 +1,29 @@
+name: Build Nocturne (Windows)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get JUCE
+        run: git clone --depth 1 --branch master https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Configure
+        run: cmake -S . -B build -DJUCE_DIR="${{ github.workspace }}/JUCE" -G "Visual Studio 17 2022" -A x64
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: NocturneDarkSynth-Windows
+          path: |
+            build/NocturneDarkSynth_artefacts/Release/Standalone/*.exe
+            build/NocturneDarkSynth_artefacts/Release/VST3/**
