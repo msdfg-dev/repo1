@@ -15,7 +15,7 @@ jobs:
         run: git clone --depth 1 --branch master https://github.com/juce-framework/JUCE.git JUCE
 
       - name: Configure
-        run: cmake -S . -B build -DJUCE_DIR="${{ github.workspace }}/JUCE" -G "Visual Studio 17 2022" -A x64
+        run: cmake -S . -B build -DJUCE_DIR="${{ github.workspace }}/JUCE"
 
       - name: Build
         run: cmake --build build --config Release --parallel
